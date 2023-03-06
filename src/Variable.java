@@ -1,11 +1,11 @@
-public class Variable {
+class Variable {
     private final String name;
-    private final boolean isOwnMember;
+    private final Scope scope;
     private final boolean isMutable;
 
-    Variable(String name, boolean isOwnMember, boolean isMutable) {
+    Variable(String name, Scope scope, boolean isMutable) {
         this.name = name;
-        this.isOwnMember = isOwnMember;
+        this.scope = scope;
         this.isMutable = isMutable;
     }
 
@@ -13,8 +13,7 @@ public class Variable {
         return isMutable;
     }
 
-    @Override
-    public String toString() {
-        return isOwnMember ? "this." : "" + name;
+    String getName() {
+        return (scope == Scope.CLASS ? "this." : "") + name;
     }
 }

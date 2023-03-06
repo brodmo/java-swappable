@@ -2,7 +2,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 
-public class Swappable {
+class Swappable {
     private final int lineNumber;
     private boolean unswappable;
     private Set<Variable> reads;
@@ -31,9 +31,10 @@ public class Swappable {
         writes.add(var);
     }
 
+    @Override
     public String toString() {
-        String reads = String.join(", ", this.reads.stream().map(Variable::toString).toList());
-        String writes = String.join(", ", this.writes.stream().map(Variable::toString).toList());
+        String reads = String.join(", ", this.reads.stream().map(Variable::getName).toList());
+        String writes = String.join(", ", this.writes.stream().map(Variable::getName).toList());
         return "%d:%n  unswappable: %b%n  reads: [%s]%n  writes: [%s]%n".formatted(lineNumber, unswappable, reads, writes);
     }
 }

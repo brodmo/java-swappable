@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class Main {
+class Main {
 
     private static final JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
 
@@ -43,7 +43,7 @@ public class Main {
     }
 
     // adapted from https://github.com/jplag/JPlag/blob/main/languages/java/src/main/java/de/jplag/java/JavacAdapter.java
-    public static Iterable<Source> parseFiles(Set<File> files) {
+    static Iterable<Source> parseFiles(Set<File> files) {
         Collection<Source> sources = new LinkedList<>();
         var listener = new DiagnosticCollector<>();
         try (StandardJavaFileManager fileManager = javac.getStandardFileManager(listener, null, StandardCharsets.UTF_8)) {

@@ -8,8 +8,8 @@ import java.util.Set;
 /**
  * Helper class to assist in generating token semantics. For languages similar in structure to Java/C
  */
-public class VariableRegistry {
-    private Map<String, Variable> globalVariables; // map global variable name to variable
+class VariableRegistry {
+    private Map<String, Variable> unscopedVariables;
     private Deque<Map<String, Variable>> memberVariables; // map member variable name to stack of variables
     private Map<String, Deque<Variable>> localVariables; // map local variable name to stack of variables
     private Deque<Set<String>> localVariablesByScope; // stack of local variable names in scope
@@ -17,8 +17,8 @@ public class VariableRegistry {
     private boolean ignoreNextOperation;
     private boolean mutableWrite;
 
-    public VariableRegistry() {
-        this.globalVariables = new HashMap<>();
+    VariableRegistry() {
+        this.unscopedVariables = new HashMap<>();
         this.memberVariables = new LinkedList<>();
         this.localVariables = new HashMap<>();
         this.localVariablesByScope = new LinkedList<>();
@@ -27,19 +27,19 @@ public class VariableRegistry {
         this.mutableWrite = false;
     }
 
-    public void setNextOperation(NextOperation nextOperation) {
+    void setNextOperation(NextOperation nextOperation) {
         this.nextOperation = nextOperation;
     }
 
-    public void setIgnoreNextOperation(boolean ignoreNextOperation) {
+    void setIgnoreNextOperation(boolean ignoreNextOperation) {
         this.ignoreNextOperation = ignoreNextOperation;
     }
 
-    public void setMutableWrite(boolean mutableWrite) {
+    void setMutableWrite(boolean mutableWrite) {
         this.mutableWrite = mutableWrite;
     }
 
-    public boolean inLocalScope() {
+    boolean inLocalScope() {
         return !localVariablesByScope.isEmpty();
     }
 
@@ -49,16 +49,13 @@ public class VariableRegistry {
     }
 
     private Variable getVariable(String variableName) {
-        // get local variable if exists
         Deque<Variable> variableIdStack = localVariables.get(variableName);
         if (variableIdStack != null)
             return variableIdStack.getLast();
-        // get member variable if exists
         Variable variable = getMemberVariable(variableName);
-        if (variable != null)
-            return variable;
-        if (nextOperation.isWrite && !variableName.equals("prob24"))
-            System.err.println(variableName);
+        return variable != null ? variable : unscopedVariables.get(variableName);
+        /* todo track global variables -> hard, how to differentiate SomeClass.staticAttr++ from String.join(...)
+        // problem here: all String.joins (for example) are registered as writes to String
         // get global variable, register if it doesn't exist
         variable = globalVariables.get(variableName);
         if (variable != null)
@@ -66,46 +63,52 @@ public class VariableRegistry {
         variable = new Variable(variableName, false, true);
         globalVariables.put(variableName, variable);
         return variable;
+         */
     }
 
-    public void registerMemberVariable(String variableName, boolean mutable) {
-        Variable variable = new Variable(variableName, true, mutable);
-        memberVariables.getLast().put(variableName, variable);
+    void registerVariable(String variableName, Scope scope, boolean mutable) {
+        Variable variable = new Variable(variableName, scope, mutable);
+        switch (scope) {
+            case FILE -> unscopedVariables.put(variableName, variable);
+            case CLASS -> memberVariables.getLast().put(variableName, variable);
+            case LOCAL -> {
+                localVariables.putIfAbsent(variableName, new LinkedList<>());
+                localVariables.get(variableName).addLast(variable);
+                localVariablesByScope.getLast().add(variableName);
+            }
+        }
     }
 
-    public void registerLocalVariable(String variableName, boolean mutable) {
-        Variable variable = new Variable(variableName, false, mutable);
-        localVariables.putIfAbsent(variableName, new LinkedList<>());
-        localVariables.get(variableName).addLast(variable);
-        localVariablesByScope.getLast().add(variableName);
-    }
-
-    public void enterClass() {
+    void enterClass() {
         memberVariables.addLast(new HashMap<>());
     }
 
-    public void exitClass() {
+    void exitClass() {
         memberVariables.removeLast();
     }
 
-    public void registerVariableOperation(String variableName, boolean isOwnMember, Swappable swappable) {
+    void registerVariableOperation(String variableName, boolean isOwnMember, Swappable swappable) {
         if (ignoreNextOperation) {
             ignoreNextOperation = false;
             return;
         }
         Variable variable = isOwnMember ? getMemberVariable(variableName) : getVariable(variableName);
-        if (nextOperation.isRead)
-            swappable.addRead(variable);
-        if (nextOperation.isWrite || (mutableWrite && variable.isMutable()))
-            swappable.addWrite(variable);
+        if (variable != null) {
+            if (nextOperation.isRead)
+                swappable.addRead(variable);
+            if (nextOperation.isWrite || (mutableWrite && variable.isMutable()))
+                swappable.addWrite(variable);
+        } else if (nextOperation.isWrite || mutableWrite) {
+            swappable.markUnswappable();
+        }
         nextOperation = NextOperation.READ;
     }
 
-    public void enterLocalScope() {
+    void enterLocalScope() {
         localVariablesByScope.addLast(new HashSet<>());
     }
 
-    public void exitLocalScope() {
+    void exitLocalScope() {
         for (String variableName : localVariablesByScope.removeLast()) {
             Deque<Variable> variableStack = localVariables.get(variableName);
             variableStack.removeLast();

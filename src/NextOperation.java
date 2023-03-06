@@ -1,4 +1,4 @@
-public enum NextOperation {
+enum NextOperation {
     READ(true, false),
     WRITE(false, true),
     READ_WRITE(true, true);

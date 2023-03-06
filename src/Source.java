@@ -5,27 +5,27 @@ import com.sun.source.util.SourcePositions;
 
 import java.net.URI;
 
-public class Source {
+class Source {
 
     private final CompilationUnitTree ast;
     private final SourcePositions positions;
     private final LineMap lineMap;
 
-    public Source(CompilationUnitTree ast, SourcePositions positions) {
+    Source(CompilationUnitTree ast, SourcePositions positions) {
         this.ast = ast;
         this.positions = positions;
         this.lineMap = ast.getLineMap();
     }
 
-    public URI getUri() {
+    URI getUri() {
         return ast.getSourceFile().toUri();
     }
 
-    public CompilationUnitTree getAst() {
+    CompilationUnitTree getAst() {
         return ast;
     }
 
-    public int getLineNumber(Tree node) {
+    int getLineNumber(Tree node) {
         return (int) lineMap.getLineNumber(positions.getStartPosition(ast, node));
     }
 }

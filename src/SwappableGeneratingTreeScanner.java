@@ -62,13 +62,14 @@ final class SwappableGeneratingTreeScanner extends TreeScanner<Void, Void> {
 
     @Override
     public Void visitClass(ClassTree node, Void unused) {
+        variableRegistry.registerVariable(node.getSimpleName().toString(), Scope.FILE, true);
         variableRegistry.enterClass();
         for (var member : node.getMembers()) {
             if (member.getKind() == Tree.Kind.VARIABLE) {
                 VariableTree variableTree = (VariableTree) member;
                 String name = variableTree.getName().toString();
                 boolean mutable = isMutable(variableTree.getType());
-                variableRegistry.registerMemberVariable(name, mutable);
+                variableRegistry.registerVariable(name, Scope.CLASS, mutable);
             }
         }
         super.visitClass(node, unused);
@@ -138,7 +139,7 @@ final class SwappableGeneratingTreeScanner extends TreeScanner<Void, Void> {
         boolean inLocalScope = variableRegistry.inLocalScope();
         if (inLocalScope) {
             boolean mutable = isMutable(node.getType());
-            variableRegistry.registerLocalVariable(name, mutable);
+            variableRegistry.registerVariable(name, Scope.LOCAL, mutable);
         }
         variableRegistry.setNextOperation(NextOperation.WRITE);
         // manually add variable to semantics since identifier isn't visited
