@@ -15,6 +15,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Deque;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
@@ -27,9 +28,9 @@ public class Main {
     public static void main(String[] args) {
         Set<File> sourceFiles = Arrays.stream(args).map(File::new).collect(Collectors.toSet());
         for (Source source: parseFiles(sourceFiles)) {
-            List<Swappable> swappableList = new LinkedList<>();
-            new SwappableGeneratingTreeScanner(source, swappableList).scan(source.getAst(), null);
-            String result = String.join("", swappableList.stream().map(Swappable::toString).toList());
+            Deque<Swappable> swappables = new LinkedList<>();
+            new SwappableGeneratingTreeScanner(source, swappables).scan(source.getAst(), null);
+            String result = String.join("", swappables.stream().map(Swappable::toString).toList());
             Path path = Paths.get(source.getUri());
             path = path.resolveSibling(path.getFileName() + "-lines.yaml");
             try {

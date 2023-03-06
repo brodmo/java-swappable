@@ -14,15 +14,14 @@ import com.sun.source.tree.UnaryTree;
 import com.sun.source.tree.VariableTree;
 import com.sun.source.util.TreeScanner;
 
-import java.util.List;
+import java.util.Deque;
 import java.util.Set;
 
 // adapted from https://github.com/mbrdl/JPlag/blob/java-semantic-tokens/languages/java/src/main/java/de/jplag/java/TokenGeneratingTreeScanner.java
 final class SwappableGeneratingTreeScanner extends TreeScanner<Void, Void> {
 
     private final Source source;
-    private List<Swappable> swappableList;
-    private Swappable swappable; // corresponds to last element in swappableList if not null
+    private Deque<Swappable> swappables;
     private VariableRegistry variableRegistry;
 
     private static final Set<String> IMMUTABLES = Set.of(
@@ -30,23 +29,20 @@ final class SwappableGeneratingTreeScanner extends TreeScanner<Void, Void> {
             "byte", "short", "int", "long", "float", "double", "boolean", "char", // primitives
             "Byte", "Short", "Integer", "Long", "Float", "Double", "Boolean", "Character", "String");
 
-
-    SwappableGeneratingTreeScanner(Source source, List<Swappable> swappableList) { // todo oopsie daisy
+    SwappableGeneratingTreeScanner(Source source, Deque<Swappable> swappables) {
         this.source = source;
-        this.swappableList = swappableList; // we add to this list
-        this.swappable = null;
+        this.swappables = swappables; // we fill this deque
         variableRegistry = new VariableRegistry();
     }
 
-    private void updateSwappable(int lineNumber) {
+    private Swappable swappable(Tree node) {
+        int lineNumber = source.getLineNumber(node);
+        Swappable swappable = swappables.peekLast();
         if (swappable == null || lineNumber != swappable.getLineNumber()) {
             swappable = new Swappable(lineNumber);
-            swappableList.add(swappable);
+            swappables.addLast(swappable);
         }
-    }
-
-    private boolean isOwnMemberSelect(MemberSelectTree memberSelect) {
-        return memberSelect.toString().equals("this");
+        return swappable;
     }
 
     private boolean isMutable(Tree classTree) {
@@ -66,6 +62,7 @@ final class SwappableGeneratingTreeScanner extends TreeScanner<Void, Void> {
 
     @Override
     public Void visitClass(ClassTree node, Void unused) {
+        variableRegistry.enterClass();
         for (var member : node.getMembers()) {
             if (member.getKind() == Tree.Kind.VARIABLE) {
                 VariableTree variableTree = (VariableTree) member;
@@ -75,7 +72,7 @@ final class SwappableGeneratingTreeScanner extends TreeScanner<Void, Void> {
             }
         }
         super.visitClass(node, unused);
-        variableRegistry.clearMemberVariables();
+        variableRegistry.exitClass();
         return null;
     }
 
@@ -137,25 +134,25 @@ final class SwappableGeneratingTreeScanner extends TreeScanner<Void, Void> {
 
     @Override
     public Void visitVariable(VariableTree node, Void unused) {
-        if (variableRegistry.inLocalScope()) {
-            String name = node.getName().toString();
+        String name = node.getName().toString();
+        boolean inLocalScope = variableRegistry.inLocalScope();
+        if (inLocalScope) {
             boolean mutable = isMutable(node.getType());
-            Variable variable = variableRegistry.registerLocalVariable(name, mutable);
-            updateSwappable(source.getLineNumber(node));
-            swappable.addWrite(variable);  // manually add variable to semantics since identifier isn't visited
-        } // no else since member variable defs are registered on class visit
+            variableRegistry.registerLocalVariable(name, mutable);
+        }
+        variableRegistry.setNextOperation(NextOperation.WRITE);
+        // manually add variable to semantics since identifier isn't visited
+        variableRegistry.registerVariableOperation(name, !inLocalScope, swappable(node));
         super.visitVariable(node, null);
         return null;
     }
 
-
     @Override
     public Void visitMethodInvocation(MethodInvocationTree node, Void unused) {
+        swappable(node).markUnswappable();
         scan(node.getTypeArguments(), null);
         // differentiate bar() and this.bar() (ignore) from bar.foo() (don't ignore)
         // look at cases foo.bar()++ and foo().bar++
-        updateSwappable(source.getLineNumber(node));
-        swappable.markUnswappable();
         variableRegistry.setIgnoreNextOperation(true);
         variableRegistry.setMutableWrite(true);
         scan(node.getMethodSelect(), null);  // foo.bar() is a write to foo
@@ -166,9 +163,8 @@ final class SwappableGeneratingTreeScanner extends TreeScanner<Void, Void> {
 
     @Override
     public Void visitMemberSelect(MemberSelectTree node, Void unused) {
-        if (isOwnMemberSelect(node)) {
-            updateSwappable(source.getLineNumber(node));
-            variableRegistry.registerVariableOperation(node.getIdentifier().toString(), true, swappable);
+        if (node.getExpression().toString().equals("this")) {
+            variableRegistry.registerVariableOperation(node.getIdentifier().toString(), true, swappable(node));
         }
         variableRegistry.setIgnoreNextOperation(false);  // don't ignore the foo in foo.bar()
         super.visitMemberSelect(node, null);
@@ -177,8 +173,7 @@ final class SwappableGeneratingTreeScanner extends TreeScanner<Void, Void> {
 
     @Override
     public Void visitIdentifier(IdentifierTree node, Void unused) {
-        updateSwappable(source.getLineNumber(node));
-        variableRegistry.registerVariableOperation(node.toString(), false, swappable);
+        variableRegistry.registerVariableOperation(node.toString(), false, swappable(node));
         super.visitIdentifier(node, null);
         return null;
     }
