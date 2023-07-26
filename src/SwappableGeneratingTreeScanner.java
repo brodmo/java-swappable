@@ -144,6 +144,9 @@ final class SwappableGeneratingTreeScanner extends TreeScanner<Void, Void> {
         variableRegistry.setNextOperation(NextOperation.WRITE);
         // manually add variable to semantics since identifier isn't visited
         variableRegistry.registerVariableOperation(name, !inLocalScope, swappable(node));
+        if (node.toString().contains("/*enum*/")) {
+            swappable(node).markUnswappable();
+        }
         super.visitVariable(node, null);
         return null;
     }
